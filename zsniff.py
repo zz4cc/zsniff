@@ -6,7 +6,8 @@ import math
 from enum import Enum
 from queue import Queue, Empty
 from scapy.all import *
-from scapy.layers import http, DNS
+from scapy.layers import http
+from scapy.layers.dns import DNS  # Fix for DNS import
 from rich.console import Console, Style
 from rich.layout import Layout
 from rich.panel import Panel
@@ -15,7 +16,7 @@ from rich.text import Text
 from rich.live import Live
 import keyboard
 import ctypes
-from threading import Thread
+from threading import Thread, Lock
 
 class CyberStyle:
     NEON_BLUE = Style(color="#00f3ff")
@@ -37,6 +38,7 @@ class CyberMonitor:
         self.capture_thread = None
         self.running = False
         self.packet_queue = Queue()
+        self.lock = Lock()  # Adding a lock for thread safety
         self.stats = {
             'total': 0, 'tcp': 0, 'udp': 0,
             'http': 0, 'dns': 0, 'other': 0,
@@ -116,18 +118,20 @@ class CyberMonitor:
 
     def capture_packets(self):
         def packet_callback(pkt):
-            self.packets.append(pkt)
-            if isinstance(pkt, IP):
-                if pkt.haslayer(TCP):
-                    self.stats['tcp'] += 1
-                elif pkt.haslayer(UDP):
-                    self.stats['udp'] += 1
-                elif pkt.haslayer(http.HTTPRequest):
-                    self.stats['http'] += 1
-                elif pkt.haslayer(DNS):
-                    self.stats['dns'] += 1
-                else:
-                    self.stats['other'] += 1
+            with self.lock:
+                self.packets.append(pkt)
+                self.stats['total'] += 1  # Increment total packet count
+                if isinstance(pkt, IP):
+                    if pkt.haslayer(TCP):
+                        self.stats['tcp'] += 1
+                    elif pkt.haslayer(UDP):
+                        self.stats['udp'] += 1
+                    elif pkt.haslayer(http.HTTPRequest):
+                        self.stats['http'] += 1
+                    elif pkt.haslayer(DNS):  # Check for DNS packets
+                        self.stats['dns'] += 1
+                    else:
+                        self.stats['other'] += 1
 
         sniff(prn=packet_callback, store=0, filter=self.filter_exp, iface=self.interface)
 
@@ -137,23 +141,18 @@ class CyberMonitor:
 
         with Live(self.layout, refresh_per_second=10, screen=True):
             while True:
-                self._process_packets()
                 self.stats['throughput'] = len(self.packets) / (time.time() - self.start_time)
-                
                 self.layout["header"].update(self._create_header())
                 self.layout["footer"].update(self._create_footer())
                 self._update_packet_view()
                 self._update_cyber_vis()
-                
                 time.sleep(0.1)
 
     def _process_packets(self):
-        # Process packets from the queue or any future updates.
         pass
 
 if __name__ == "__main__":
     if platform.system() == 'Windows':
-        # Check if the script is running with admin privileges
         if not ctypes.windll.shell32.IsUserAnAdmin():
             print("🚫 SYSTEM ACCESS DENIED - RUN AS ADMINISTRATOR")
             sys.exit()
@@ -162,7 +161,14 @@ if __name__ == "__main__":
 
     # Get network interface and filter expression from the user
     monitor.interface = input("Enter the network interface to capture on (e.g., eth0, wlan0): ").strip()
+    if not monitor.interface:
+        print("Error: Please provide a valid network interface.")
+        sys.exit()
+    
     monitor.filter_exp = input("Enter a BPF filter (e.g., tcp port 80): ").strip()
+    if not monitor.filter_exp:
+        print("Error: Please provide a valid BPF filter expression.")
+        sys.exit()
 
     try:
         monitor.run()
