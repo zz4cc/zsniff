@@ -7,6 +7,6 @@ pip install rich scapy keyboard
 ```
 ### Usage
 ```
-pip install scapy
+sudo python3 cybermon.py
 ```
 
