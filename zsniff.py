@@ -6,7 +6,7 @@ import math
 from enum import Enum
 from queue import Queue, Empty
 from scapy.all import *
-from scapy.layers import http
+from scapy.layers import http, DNS
 from rich.console import Console, Style
 from rich.layout import Layout
 from rich.panel import Panel
@@ -147,13 +147,24 @@ class CyberMonitor:
                 
                 time.sleep(0.1)
 
+    def _process_packets(self):
+        # Process packets from the queue or any future updates.
+        pass
+
 if __name__ == "__main__":
-    if platform.system() == 'Windows' and not ctypes.windll.shell32.IsUserAnAdmin():
-        print("🚫 SYSTEM ACCESS DENIED - RUN AS ADMINISTRATOR")
-        sys.exit()
+    if platform.system() == 'Windows':
+        # Check if the script is running with admin privileges
+        if not ctypes.windll.shell32.IsUserAnAdmin():
+            print("🚫 SYSTEM ACCESS DENIED - RUN AS ADMINISTRATOR")
+            sys.exit()
 
     monitor = CyberMonitor()
+
+    # Get network interface and filter expression from the user
+    monitor.interface = input("Enter the network interface to capture on (e.g., eth0, wlan0): ").strip()
+    monitor.filter_exp = input("Enter a BPF filter (e.g., tcp port 80): ").strip()
+
     try:
         monitor.run()
     except KeyboardInterrupt:
-        print("\n[bold red]🚨 SYSTEM SHUTDOWN INITIATED[/]")  
+        print("\n[bold red]🚨 SYSTEM SHUTDOWN INITIATED[/]")
